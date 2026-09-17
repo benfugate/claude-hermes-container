@@ -47,3 +47,5 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
+
+# (touch to trigger a Dependabot re-evaluation)
