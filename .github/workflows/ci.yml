@@ -1,0 +1,65 @@
+name: CI
+
+# Validation only. Pushes to main are covered by publish.yml, which builds
+# before it pushes — running this on push too would just build everything twice.
+on:
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: Build image (no push)
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha,scope=latest
+          cache-to: type=gha,mode=max,scope=latest
+
+  automerge:
+    # Base-image digest bumps only. Upstream submodule PRs are deliberately
+    # excluded: this container has SSH access to the homelab, so new application
+    # code gets eyes on it before it ships. Merge those by hand.
+    if: github.actor == 'dependabot[bot]'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve PR
+        if: steps.meta.outputs.package-ecosystem == 'docker'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr comment "$PR_URL" --body "Auto-approving Dependabot base-image digest update."
+
+      - name: Enable auto-merge
+        if: steps.meta.outputs.package-ecosystem == 'docker'
+        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3
+        with:
+          # A PAT, not GITHUB_TOKEN: merges made with GITHUB_TOKEN do not trigger
+          # downstream workflows, so publish.yml would never fire on the merge.
+          token: ${{ secrets.MERGE_GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash

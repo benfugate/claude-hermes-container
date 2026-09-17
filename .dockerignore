@@ -1,0 +1,6 @@
+.git
+.github
+.gitmodules
+README.md
+LICENSE
+# NOTE: upstream/ must NOT be ignored — it is the application.

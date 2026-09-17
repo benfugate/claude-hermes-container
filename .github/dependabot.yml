@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Upstream application code. claude-hermes is not published to npm and arrives
+  # here as a git submodule, so this is what keeps the image tracking upstream.
+  # Dependabot runs on its own scheduler, which is why this repo needs no Actions
+  # `schedule:` trigger (those are auto-disabled after 60 days of inactivity).
+  #
+  # Submodule updates follow the tracked branch HEAD; they are NOT auto-merged.
+  # This container holds SSH keys to the homelab hosts, so app-code bumps get a
+  # look before they ship. ci.yml still builds every PR.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+
+  # Base image digest, same arrangement as the caddy repo. These ARE auto-merged.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: chore
+      include: scope
+    allow:
+      - dependency-name: "node"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
