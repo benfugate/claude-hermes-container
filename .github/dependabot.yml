@@ -5,7 +5,10 @@ updates:
   # Dependabot runs on its own scheduler, which is why this repo needs no Actions
   # `schedule:` trigger (those are auto-disabled after 60 days of inactivity).
   #
-  # Submodule updates follow the tracked branch HEAD; they are NOT auto-merged.
+  # `branch = main` is set in .gitmodules deliberately. Without it Dependabot
+  # resolves the pinned tag and reports "no update needed" indefinitely, so the
+  # tracking silently never fires. With it, it follows main HEAD. Bumps are NOT
+  # auto-merged.
   # This container holds SSH keys to the homelab hosts, so app-code bumps get a
   # look before they ship. ci.yml still builds every PR.
   - package-ecosystem: "gitsubmodule"
@@ -28,6 +31,16 @@ updates:
       include: scope
     allow:
       - dependency-name: "node"
+    # Digest-only. The tag stays at 24-trixie-slim and only the pinned sha256
+    # moves. Without this, Dependabot proposes major jumps (it opened a
+    # 24 -> 26 PR immediately), and the docker ecosystem is the one that
+    # auto-merges -- an unreviewed major base-image bump is exactly the
+    # failure mode that broke the mariadb/Flyway stack.
+    ignore:
+      - dependency-name: "node"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
 
   - package-ecosystem: "github-actions"
     directory: "/"

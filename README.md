@@ -16,8 +16,8 @@ workflows are auto-disabled after 60 days of repository inactivity):
 
 | Change | Update path |
 |---|---|
-| Upstream app code | Dependabot `gitsubmodule` PR → **merged by hand** → publish |
-| Base image digest | Dependabot `docker` PR → auto-approved and auto-merged → publish |
+| Upstream app code | Dependabot `gitsubmodule` PR (tracks `main` HEAD) → **merged by hand** → publish |
+| Base image digest | Dependabot `docker` PR (digest only) → auto-approved and auto-merged → publish |
 | Action versions | Dependabot `github-actions` PR → merged by hand |
 
 Submodule bumps are deliberately *not* auto-merged: this container holds SSH keys to
