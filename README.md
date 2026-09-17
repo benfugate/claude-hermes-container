@@ -16,7 +16,7 @@ workflows are auto-disabled after 60 days of repository inactivity):
 
 | Change | Update path |
 |---|---|
-| Upstream app code | Dependabot `gitsubmodule` PR (tracks `main` HEAD) → **merged by hand** → publish |
+| Upstream app code | Dependabot `gitsubmodule` PR (tracks newest upstream **tag**) → **merged by hand** → publish |
 | Base image digest | Dependabot `docker` PR (digest only) → auto-approved and auto-merged → publish |
 | Action versions | Dependabot `github-actions` PR → merged by hand |
 
@@ -52,3 +52,19 @@ git clone --recurse-submodules https://github.com/benfugate/claude-hermes-contai
 cd claude-hermes-container
 docker build -t claude-hermes:local .
 ```
+
+## Verifying the tracking still works
+
+Dependabot only re-evaluates on its own schedule or when `.github/dependabot.yml`
+changes — a submodule pointer change alone does **not** trigger it. To prove the
+mechanism end to end, pin `upstream/` back to an older tag, touch the Dependabot
+config, and confirm a bump PR appears:
+
+```bash
+git -C upstream checkout v1.0.3 && git add upstream
+printf '\n#\n' >> .github/dependabot.yml
+git commit -am "test tracking" && git push
+```
+
+This was last verified on 2026-09-17: Dependabot proposed `faea5da` → `1c8f7d6`
+(v1.0.3 → v1.1.0).

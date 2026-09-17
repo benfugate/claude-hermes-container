@@ -5,10 +5,12 @@ updates:
   # Dependabot runs on its own scheduler, which is why this repo needs no Actions
   # `schedule:` trigger (those are auto-disabled after 60 days of inactivity).
   #
-  # `branch = main` is set in .gitmodules deliberately. Without it Dependabot
-  # resolves the pinned tag and reports "no update needed" indefinitely, so the
-  # tracking silently never fires. With it, it follows main HEAD. Bumps are NOT
-  # auto-merged.
+  # Verified behaviour (tested 2026-09-17 by pinning back to v1.0.3): Dependabot
+  # resolves the newest upstream *tag*, not main HEAD -- it proposed v1.1.0 while
+  # main sat two commits further ahead. So this tracks upstream releases, the same
+  # semantic as the caddy repo's `caddy:latest` digest. A `branch` key in
+  # .gitmodules does not change this; it was tried and made no difference.
+  # Bumps are NOT auto-merged.
   # This container holds SSH keys to the homelab hosts, so app-code bumps get a
   # look before they ship. ci.yml still builds every PR.
   - package-ecosystem: "gitsubmodule"
@@ -47,5 +49,3 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 1
-
-# (touch to trigger a Dependabot re-evaluation)
