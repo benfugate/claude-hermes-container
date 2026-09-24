@@ -37,7 +37,11 @@ ENV PATH="/root/.local/bin:$PATH"
 # The Claude Code CLI is the actual inference path: claude-hermes spawns
 # `claude` per turn, so the container authenticates with the subscription
 # rather than an API key.
-RUN npm install -g @anthropic-ai/claude-code pnpm
+# Version comes from claude-code/package.json, bumped by Dependabot.
+COPY claude-code/package.json /tmp/claude-code/package.json
+RUN npm install -g pnpm \
+    "@anthropic-ai/claude-code@$(node -p "require('/tmp/claude-code/package.json').dependencies['@anthropic-ai/claude-code']")" \
+    && rm -rf /tmp/claude-code
 
 # ── Persistence env vars ──────────────────────────────────────────────────────
 # Redirect each package manager's install paths and cache into /root/.claude/

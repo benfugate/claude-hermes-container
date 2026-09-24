@@ -18,6 +18,7 @@ workflows are auto-disabled after 60 days of repository inactivity):
 |---|---|
 | Upstream app code | Dependabot `gitsubmodule` PR (tracks newest upstream **tag**) → **merged by hand** → publish |
 | Base image digest | Dependabot `docker` PR (digest only) → auto-approved and auto-merged → publish |
+| Claude Code CLI | Dependabot `npm` PR on `claude-code/package.json` → auto-approved and auto-merged → publish |
 | Action versions | Dependabot `github-actions` PR → merged by hand |
 
 Submodule bumps are deliberately *not* auto-merged: this container holds SSH keys to

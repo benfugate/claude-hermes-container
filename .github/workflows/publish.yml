@@ -2,6 +2,7 @@ name: Build and Push Docker Image
 
 # Every path to a new image ends in a push to main:
 #   - Dependabot bumps the base-image digest -> ci.yml auto-merges -> push
+#   - Dependabot bumps the Claude Code CLI -> ci.yml auto-merges -> push
 #   - Dependabot bumps the upstream submodule -> merged by hand -> push
 #   - workflow_dispatch for a manual rebuild
 # No `schedule:` trigger, so there is nothing for GitHub to auto-disable.

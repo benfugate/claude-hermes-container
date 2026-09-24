@@ -29,9 +29,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=latest
 
   automerge:
-    # Base-image digest bumps only. Upstream submodule PRs are deliberately
-    # excluded: this container has SSH access to the homelab, so new application
-    # code gets eyes on it before it ships. Merge those by hand.
+    # Base-image digest bumps and Claude Code CLI bumps. Upstream submodule PRs
+    # are deliberately excluded: this container has SSH access to the homelab,
+    # so new application code gets eyes on it before it ships. Merge those by hand.
     if: github.actor == 'dependabot[bot]'
     needs: build
     runs-on: ubuntu-latest
@@ -46,16 +46,16 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Approve PR
-        if: steps.meta.outputs.package-ecosystem == 'docker'
+        if: steps.meta.outputs.package-ecosystem == 'docker' || (steps.meta.outputs.package-ecosystem == 'npm_and_yarn' && steps.meta.outputs.dependency-names == '@anthropic-ai/claude-code')
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr review --approve "$PR_URL"
-          gh pr comment "$PR_URL" --body "Auto-approving Dependabot base-image digest update."
+          gh pr comment "$PR_URL" --body "Auto-approving Dependabot ${{ steps.meta.outputs.dependency-names }} update."
 
       - name: Enable auto-merge
-        if: steps.meta.outputs.package-ecosystem == 'docker'
+        if: steps.meta.outputs.package-ecosystem == 'docker' || (steps.meta.outputs.package-ecosystem == 'npm_and_yarn' && steps.meta.outputs.dependency-names == '@anthropic-ai/claude-code')
         uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3
         with:
           # A PAT, not GITHUB_TOKEN: merges made with GITHUB_TOKEN do not trigger
