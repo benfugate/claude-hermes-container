@@ -49,6 +49,11 @@ updates:
     directory: "/claude-code"
     schedule:
       interval: daily
+    # Dependabot applies a 3-day release-age cooldown by default (since
+    # 2026-07-14), which kept this CLI permanently ~3 releases behind. Opted out
+    # so the image follows Claude Code releases as they ship.
+    cooldown:
+      default-days: 0
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore
