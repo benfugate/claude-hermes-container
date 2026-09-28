@@ -10,9 +10,8 @@ updates:
   # main sat two commits further ahead. So this tracks upstream releases, the same
   # semantic as the caddy repo's `caddy:latest` digest. A `branch` key in
   # .gitmodules does not change this; it was tried and made no difference.
-  # Bumps are NOT auto-merged.
-  # This container holds SSH keys to the homelab hosts, so app-code bumps get a
-  # look before they ship. ci.yml still builds every PR.
+  # This container holds SSH keys to the homelab hosts, so app-code bumps get an
+  # AI security review in ci.yml and auto-merge only on a "safe" verdict.
   - package-ecosystem: "gitsubmodule"
     directory: "/"
     schedule:

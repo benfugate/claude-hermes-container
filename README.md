@@ -11,19 +11,23 @@ is a git submodule pinned to a specific commit.
 
 ## How it tracks upstream
 
-Rebuilds are event-driven, with no Actions `schedule:` trigger anywhere (scheduled
-workflows are auto-disabled after 60 days of repository inactivity):
+Updates arrive as Dependabot PRs. Every merge to `main` publishes a new image:
 
 | Change | Update path |
 |---|---|
-| Upstream app code | Dependabot `gitsubmodule` PR (tracks newest upstream **tag**) → **merged by hand** → publish |
+| Upstream app code | Dependabot `gitsubmodule` PR (tracks newest upstream **tag**) → AI security review → auto-merged if `safe`, else by hand → publish |
 | Base image digest | Dependabot `docker` PR (digest only) → auto-approved and auto-merged → publish |
 | Claude Code CLI | Dependabot `npm` PR on `claude-code/package.json` → auto-approved and auto-merged → publish |
 | Action versions | Dependabot `github-actions` PR → merged by hand |
 
-Submodule bumps are deliberately *not* auto-merged: this container holds SSH keys to
-the homelab hosts, so new upstream application code gets reviewed before it ships.
-Every PR is still built by `ci.yml` first.
+This container holds SSH keys to the homelab hosts, so upstream bumps are reviewed
+before they ship. Claude Code, running DeepSeek V4.1 Flash through OpenRouter, reads
+the full diff with read-only tools (`.github/scripts/review-upstream.sh`) and posts a
+verdict on the PR. Only `safe` auto-merges. `needs_human` and `unsafe` wait for you.
+Binary changes, rewritten history and diffs over 15,000 lines always go to a human.
+
+The review needs an `OPENROUTER_API_KEY` **Dependabot** secret. Without it the
+review fails and the PR waits for you.
 
 Each image is labelled with the exact upstream revision it was built from:
 

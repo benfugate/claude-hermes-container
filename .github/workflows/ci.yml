@@ -11,6 +11,12 @@ permissions:
   contents: read
   pull-requests: write
 
+# A new commit on a PR cancels the run for the old one, so an older review can
+# never merge after the PR has moved on.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,12 +34,57 @@ jobs:
           cache-from: type=gha,scope=latest
           cache-to: type=gha,mode=max,scope=latest
 
-  automerge:
-    # Base-image digest bumps and Claude Code CLI bumps. Upstream submodule PRs
-    # are deliberately excluded: this container has SSH access to the homelab,
-    # so new application code gets eyes on it before it ships. Merge those by hand.
+  review-upstream:
+    # AI security review of upstream submodule bumps (.github/scripts/review-upstream.sh).
+    # Read-only token and no git credentials left in the checkout: the model is
+    # reading code someone else wrote, so nothing in reach is worth stealing if
+    # that code tries to steer it. Needs an OPENROUTER_API_KEY *Dependabot*
+    # secret; Dependabot-triggered runs cannot see Actions secrets.
     if: github.actor == 'dependabot[bot]'
-    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      review: ${{ steps.review.outputs.review }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find the upstream bump
+        id: bump
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo "old=$(git rev-parse "$BASE_SHA:upstream")" >> "$GITHUB_OUTPUT"
+          echo "new=$(git rev-parse HEAD:upstream)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Claude Code
+        if: steps.bump.outputs.old != steps.bump.outputs.new
+        run: npm install -g "@anthropic-ai/claude-code@$(node -p "require('./claude-code/package.json').dependencies['@anthropic-ai/claude-code']")"
+
+      - name: Review
+        id: review
+        if: steps.bump.outputs.old != steps.bump.outputs.new
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OLD: ${{ steps.bump.outputs.old }}
+          NEW: ${{ steps.bump.outputs.new }}
+        run: |
+          review=$(.github/scripts/review-upstream.sh "$OLD" "$NEW")
+          echo "review=$(jq -c . <<< "$review")" >> "$GITHUB_OUTPUT"
+          jq . <<< "$review"
+
+  automerge:
+    # Base-image digest bumps and Claude Code CLI bumps merge once the build
+    # passes. Upstream submodule bumps also need review-upstream to answer
+    # "safe": this container has SSH access to the homelab. Any other verdict,
+    # or a review that fails to run, leaves the PR for a human.
+    if: always() && github.actor == 'dependabot[bot]' && needs.build.result == 'success'
+    needs: [build, review-upstream]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -45,8 +96,35 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Decide
+        id: decide
+        env:
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+          REVIEW: ${{ needs.review-upstream.outputs.review }}
+        run: |
+          if [[ $ECOSYSTEM == docker ]] ||
+             [[ $ECOSYSTEM == npm_and_yarn && $DEPS == "@anthropic-ai/claude-code" ]] ||
+             [[ -n $REVIEW && $(jq -r .verdict <<< "$REVIEW") == safe ]]; then
+            echo "merge=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post the upstream review
+        if: needs.review-upstream.outputs.review != ''
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVIEW: ${{ needs.review-upstream.outputs.review }}
+        run: |
+          jq -r '
+            "**AI security review: `\(.verdict)`**\n\n\(.summary)\n",
+            (.findings[] | "- **\(.severity)** `\(.file)`: \(.concern)"),
+            "\n" + (if .verdict == "safe" then "The build passed, so this is merging now."
+                     else "Not auto-merged. Read the concerns above before you decide whether to merge." end)
+          ' <<< "$REVIEW" | gh pr comment "$PR_URL" --body-file -
+
       - name: Approve PR
-        if: steps.meta.outputs.package-ecosystem == 'docker' || (steps.meta.outputs.package-ecosystem == 'npm_and_yarn' && steps.meta.outputs.dependency-names == '@anthropic-ai/claude-code')
+        if: steps.decide.outputs.merge == 'true'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,12 +132,16 @@ jobs:
           gh pr review --approve "$PR_URL"
           gh pr comment "$PR_URL" --body "Auto-approving Dependabot ${{ steps.meta.outputs.dependency-names }} update."
 
-      - name: Enable auto-merge
-        if: steps.meta.outputs.package-ecosystem == 'docker' || (steps.meta.outputs.package-ecosystem == 'npm_and_yarn' && steps.meta.outputs.dependency-names == '@anthropic-ai/claude-code')
-        uses: peter-evans/enable-pull-request-automerge@a660677d5469627102a1c1e11409dd063606628d # v3
-        with:
+      - name: Merge
+        if: steps.decide.outputs.merge == 'true'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # A PAT, not GITHUB_TOKEN: merges made with GITHUB_TOKEN do not trigger
           # downstream workflows, so publish.yml would never fire on the merge.
-          token: ${{ secrets.MERGE_GITHUB_TOKEN }}
-          pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: squash
+          GH_TOKEN: ${{ secrets.MERGE_GITHUB_TOKEN }}
+        # Merges now instead of queueing auto-merge. main has no required checks,
+        # so a queued merge would take a later commit without waiting for CI.
+        # --match-head-commit refuses if the PR has moved past what was built
+        # and reviewed.
+        run: gh pr merge "$PR_URL" --squash --match-head-commit "$HEAD_SHA"
