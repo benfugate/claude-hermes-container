@@ -24,8 +24,13 @@ updates:
   # Base image digest, same arrangement as the caddy repo. These ARE auto-merged.
   - package-ecosystem: "docker"
     directory: "/"
+    # Every day, an hour before sfftime pulls images at 02:00 local, so a merged
+    # bump ships that night. `daily` would skip weekends and run at ~11:53 UTC,
+    # just after the pull, leaving each image waiting a day.
     schedule:
-      interval: daily
+      interval: cron
+      cronjob: "0 1 * * *"
+      timezone: "America/New_York"
     open-pull-requests-limit: 1
     commit-message:
       prefix: chore
@@ -46,8 +51,11 @@ updates:
   # Claude Code CLI version installed by the Dockerfile. Auto-merged.
   - package-ecosystem: "npm"
     directory: "/claude-code"
+    # Same schedule as the docker block, and for the same reason.
     schedule:
-      interval: daily
+      interval: cron
+      cronjob: "0 1 * * *"
+      timezone: "America/New_York"
     # Dependabot applies a 3-day release-age cooldown by default (since
     # 2026-07-14), which kept this CLI permanently ~3 releases behind. Opted out
     # so the image follows Claude Code releases as they ship.
