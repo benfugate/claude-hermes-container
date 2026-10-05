@@ -42,6 +42,12 @@ docker image inspect ghcr.io/benfugate/claude-hermes-container:latest \
   and Discord are the only interfaces.
 - **State lives in `/root/.claude`** (declared as a volume). claude-hermes resolves
   its own state to `.claude/hermes/` relative to the working directory.
+- **File memory is symlinked into the volume.** Upstream puts it at `<cwd>/memory`,
+  i.e. `/root/memory` — *outside* the volume — and `prompts/RULES.md` forbids the
+  agent from writing anywhere else. Every container recreate (Unraid CA Auto Update
+  pulls nightly) therefore wiped its notes while the episodic SQLite layer survived.
+  The entrypoint points `/root/memory` at `/root/.claude/memory`, mirroring how
+  `/root/.ssh` is pointed at `/root/.claude/ssh`.
 - **Migration from claudeclaw** is automatic: on first start it copies
   `.claude/claudeclaw` to `.claude/hermes` and archives the original. The entrypoint
   deliberately skips bootstrapping default settings while an unmigrated legacy

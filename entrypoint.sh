@@ -63,4 +63,28 @@ mkdir -p /root/.claude/tmp \
          /root/.claude/uv-tools /root/.claude/uv-tool-bin \
          /root/.claude/uv-cache /root/.claude/uv-python
 
+# ── File memory ───────────────────────────────────────────────────────────────
+# claude-hermes resolves file memory as `<cwd>/memory` (src/paths.ts memoryDir),
+# and cwd is /root — one level ABOVE the volume. Worse, prompts/RULES.md ships a
+# non-overridable "MEMORY OVERRIDE" block telling the agent that <project-root>/
+# memory/ is the *only* legal place to write, so it cannot opt out.
+#
+# That put every note in the container's writable layer. Unraid's CA Auto Update
+# runs `dockerUpdateAll` nightly at 02:00 and RECREATES the container on each new
+# image digest, so the agent silently lost all of its notes every day or two
+# while its episodic layer (state.db, inside the volume) kept working — it
+# remembered the conversations but not the conclusions.
+#
+# Redirect the directory into the volume, the same way /root/.ssh is redirected
+# to /root/.claude/ssh. Done here rather than in the Dockerfile because the
+# volume does not exist at image-build time.
+mkdir -p /root/.claude/memory
+if [ -d /root/memory ] && [ ! -L /root/memory ]; then
+    # A real directory means notes written before this fix (or by a container
+    # that predates it). Preserve them; -n so the volume copy always wins.
+    cp -an /root/memory/. /root/.claude/memory/ 2>/dev/null || true
+    rm -rf /root/memory
+fi
+ln -sfn /root/.claude/memory /root/memory
+
 exec bun run /app/src/index.ts "$@"
