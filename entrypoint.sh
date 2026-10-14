@@ -87,4 +87,13 @@ if [ -d /root/memory ] && [ ! -L /root/memory ]; then
 fi
 ln -sfn /root/.claude/memory /root/memory
 
+# ── OAuth token ───────────────────────────────────────────────────────────────
+# cleanChildEnv() (upstream src/runner.ts) strips every CLAUDE_CODE_* var before
+# spawning claude, so a CLAUDE_CODE_OAUTH_TOKEN set in the container template
+# never reaches a turn. Re-expose it under a name that survives; the
+# hermes-claude wrapper (HERMES_CLAUDE_BIN) turns it back.
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+    export HERMES_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}"
+fi
+
 exec bun run /app/src/index.ts "$@"

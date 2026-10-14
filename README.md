@@ -48,6 +48,11 @@ docker image inspect ghcr.io/benfugate/claude-hermes-container:latest \
   pulls nightly) therefore wiped its notes while the episodic SQLite layer survived.
   The entrypoint points `/root/memory` at `/root/.claude/memory`, mirroring how
   `/root/.ssh` is pointed at `/root/.claude/ssh`.
+- **Auth comes from `CLAUDE_CODE_OAUTH_TOKEN`** in the container template (a
+  `claude setup-token` value). Upstream strips every `CLAUDE_CODE_*` var before spawning
+  `claude`, so the entrypoint re-exposes it as `HERMES_OAUTH_TOKEN` and a small wrapper
+  (`HERMES_CLAUDE_BIN=/usr/local/bin/hermes-claude`) restores it for each turn. Rotate by
+  editing the template var and recreating. Unset, it falls back to `.credentials.json`.
 - **Migration from claudeclaw** is automatic: on first start it copies
   `.claude/claudeclaw` to `.claude/hermes` and archives the original. The entrypoint
   deliberately skips bootstrapping default settings while an unmigrated legacy

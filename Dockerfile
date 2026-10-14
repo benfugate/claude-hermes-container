@@ -75,7 +75,11 @@ COPY upstream/ /app/
 RUN bun install --frozen-lockfile
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Wrapper that restores CLAUDE_CODE_OAUTH_TOKEN, which upstream cleanChildEnv()
+# strips. HERMES_CLAUDE_BIN is upstream's own seam (src/runtime/claude-cli.ts).
+COPY claude-auth-wrapper.sh /usr/local/bin/hermes-claude
+RUN chmod +x /entrypoint.sh /usr/local/bin/hermes-claude
+ENV HERMES_CLAUDE_BIN=/usr/local/bin/hermes-claude
 
 # Claude Code config, hermes settings/state/logs, and agent-installed tooling.
 VOLUME /root/.claude
