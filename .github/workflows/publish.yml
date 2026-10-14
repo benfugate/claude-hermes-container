@@ -18,7 +18,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The application lives in the `upstream/` submodule; without this the
           # Dockerfile's COPY finds an empty directory and the image ships no app.
