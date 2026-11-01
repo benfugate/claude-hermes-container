@@ -57,9 +57,39 @@ docker image inspect ghcr.io/benfugate/claude-hermes-container:latest \
   `.claude/claudeclaw` to `.claude/hermes` and archives the original. The entrypoint
   deliberately skips bootstrapping default settings while an unmigrated legacy
   directory is present, because the migrator refuses to run if both directories exist.
+- **A stale `daemon.pid` is removed at start.** After an unclean stop it holds `1`,
+  and PID 1 is always alive in a fresh container, so hermes would refuse to start.
 - The Chromium/Playwright runtime libraries are **not** installed. They are only
   needed by the dev-browser plugin, which is reached through `preflight`, and
   `plugins.preflightOnStart` defaults to false. Enabling preflight means adding them back.
+
+## Running other agents from this image
+
+One image can serve several agents, each with its own `/root/.claude` volume. Two
+settings make that work without building a derived image:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `HERMES_INIT_DIR` | `/etc/hermes/init.d` | Every `*.sh` here runs in name order before hermes starts, after the volume directories exist and before the default `settings.json` is written. Use it to seed `hermes/settings.json`, install a `CLAUDE.md` or `/root/.mcp.json`, or merge Claude Code settings. A hook that exits non-zero stops the container. |
+| `SESSION_RESET_CRON` | unset (off) | 5-field cron expression in `TZ`. Clears every conversation's Claude session on that schedule, the same as `/reset`; memory and transcripts are untouched. `docker exec <container> bun run /opt/hermes-container/session-reset.ts --now` resets once. |
+
+```yaml
+  agent:
+    image: ghcr.io/benfugate/claude-hermes-container:latest
+    volumes:
+      - ./agent:/root/.claude
+      - ./init.d:/etc/hermes/init.d:ro
+    environment:
+      TZ: America/New_York
+      SESSION_RESET_CRON: "0 4 * * *"
+```
+
+With neither set, the container behaves exactly as before.
+
+Hooks run as root, so keep them out of the agent's reach: mount the directory
+read-only, from outside the agent's volume. The entrypoint refuses to start if
+`HERMES_INIT_DIR` resolves inside `/root/.claude`, where the agent could plant a
+hook that outlives the next image update.
 
 ## Local build
 

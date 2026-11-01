@@ -80,6 +80,8 @@ COPY entrypoint.sh /entrypoint.sh
 COPY claude-auth-wrapper.sh /usr/local/bin/hermes-claude
 RUN chmod +x /entrypoint.sh /usr/local/bin/hermes-claude
 ENV HERMES_CLAUDE_BIN=/usr/local/bin/hermes-claude
+# Optional scheduled /reset (SESSION_RESET_CRON); imports upstream's cron parser from /app.
+COPY session-reset.ts /opt/hermes-container/session-reset.ts
 
 # Claude Code config, hermes settings/state/logs, and agent-installed tooling.
 VOLUME /root/.claude
