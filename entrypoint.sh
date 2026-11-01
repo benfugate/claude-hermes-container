@@ -8,37 +8,6 @@ SETTINGS_DIR="/root/.claude/hermes"
 SETTINGS_FILE="${SETTINGS_DIR}/settings.json"
 LEGACY_DIR="/root/.claude/claudeclaw"
 
-# Do NOT bootstrap settings while an unmigrated claudeclaw directory is present.
-#
-# claude-hermes ships a one-shot migrator (src/migrate/legacy.ts) that copies
-# .claude/claudeclaw -> .claude/hermes on first start. It refuses with status
-# "conflict" if BOTH directories already exist without a MIGRATED marker. So
-# creating a default settings.json here first would permanently block the
-# migration and leave the real config stranded in the legacy directory.
-if [ -d "${LEGACY_DIR}" ] && [ ! -f "${SETTINGS_DIR}/.MIGRATED" ] && [ ! -d "${SETTINGS_DIR}" ]; then
-    echo "[hermes] Legacy claudeclaw directory found and hermes/ is absent."
-    echo "[hermes] Leaving both alone so the built-in migrator can run."
-elif [ ! -f "${SETTINGS_FILE}" ]; then
-    mkdir -p "${SETTINGS_DIR}"
-    cat > "${SETTINGS_FILE}" << 'EOF'
-{
-  "model": "opus",
-  "telegram": {
-    "token": "",
-    "allowedUserIds": []
-  },
-  "discord": {
-    "token": "",
-    "allowedUserIds": [],
-    "listenChannels": [],
-    "statusChannelId": ""
-  }
-}
-EOF
-    echo "[hermes] Created default settings at ${SETTINGS_FILE}"
-    echo "[hermes] Add your Discord bot token and allowedUserIds before use."
-fi
-
 cd /root
 
 # Create the directories the persistence env vars point at. The vars are set as
@@ -94,6 +63,82 @@ ln -sfn /root/.claude/memory /root/memory
 # hermes-claude wrapper (HERMES_CLAUDE_BIN) turns it back.
 if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
     export HERMES_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}"
+fi
+
+# ── Stale PID file ────────────────────────────────────────────────────────────
+# hermes refuses to start while hermes/daemon.pid names a live process. After an
+# unclean stop the file holds 1, and inside a fresh container PID 1 is always
+# alive (it is this script, then bun), so the daemon would never come back. Only
+# one daemon runs per container, so any pid file at container start is stale.
+rm -f "${SETTINGS_DIR}/daemon.pid"
+
+# ── Init hooks ────────────────────────────────────────────────────────────────
+# Lets one image serve more than one agent. A deployment mounts a directory of
+# `*.sh` scripts at HERMES_INIT_DIR and each runs here, in name order, before
+# hermes starts: seed hermes/settings.json, install a CLAUDE.md or .mcp.json,
+# merge Claude Code settings. They run after the volume directories above exist,
+# so uv/npm/pip installs land in the volume, and before the default settings
+# below, so a hook that writes settings.json wins. A failing hook stops the
+# container instead of starting a half-configured agent.
+#
+# Hooks run as root before anything else, so they must come from the operator,
+# never from the agent. The agent can write anywhere in /root/.claude and that
+# survives image updates, so a hook directory inside it would let one turn plant
+# code that runs on every later start. Refuse it outright (realpath catches a
+# symlink such as /root/memory). Mount the directory read-only.
+INIT_DIR="${HERMES_INIT_DIR:-/etc/hermes/init.d}"
+case "$(realpath -m "${INIT_DIR}")/" in
+    /root/.claude/*|/root/memory/*)
+        echo "[hermes] HERMES_INIT_DIR=${INIT_DIR} is inside the agent's volume; refusing to start." >&2
+        exit 1
+        ;;
+esac
+if [ -d "${INIT_DIR}" ]; then
+    for hook in "${INIT_DIR}"/*.sh; do
+        [ -f "${hook}" ] || continue
+        echo "[hermes] init hook: ${hook}"
+        # bash rather than ./hook: bind-mounted files often lack the exec bit.
+        bash "${hook}"
+    done
+fi
+
+# Do NOT bootstrap settings while an unmigrated claudeclaw directory is present.
+#
+# claude-hermes ships a one-shot migrator (src/migrate/legacy.ts) that copies
+# .claude/claudeclaw -> .claude/hermes on first start. It refuses with status
+# "conflict" if BOTH directories already exist without a MIGRATED marker. So
+# creating a default settings.json here first would permanently block the
+# migration and leave the real config stranded in the legacy directory.
+if [ -d "${LEGACY_DIR}" ] && [ ! -f "${SETTINGS_DIR}/.MIGRATED" ] && [ ! -d "${SETTINGS_DIR}" ]; then
+    echo "[hermes] Legacy claudeclaw directory found and hermes/ is absent."
+    echo "[hermes] Leaving both alone so the built-in migrator can run."
+elif [ ! -f "${SETTINGS_FILE}" ]; then
+    mkdir -p "${SETTINGS_DIR}"
+    cat > "${SETTINGS_FILE}" << 'EOF'
+{
+  "model": "opus",
+  "telegram": {
+    "token": "",
+    "allowedUserIds": []
+  },
+  "discord": {
+    "token": "",
+    "allowedUserIds": [],
+    "listenChannels": [],
+    "statusChannelId": ""
+  }
+}
+EOF
+    echo "[hermes] Created default settings at ${SETTINGS_FILE}"
+    echo "[hermes] Add your Discord bot token and allowedUserIds before use."
+fi
+
+# ── Scheduled session reset ───────────────────────────────────────────────────
+# SESSION_RESET_CRON (5-field cron in TZ) clears every conversation's Claude
+# session on a schedule, the same UPDATE hermes runs for /reset. hermes has no
+# time-based reset of its own. Unset or "off" leaves conversations alone.
+if [ -n "${SESSION_RESET_CRON:-}" ] && [ "${SESSION_RESET_CRON}" != "off" ]; then
+    bun run /opt/hermes-container/session-reset.ts &
 fi
 
 exec bun run /app/src/index.ts "$@"
