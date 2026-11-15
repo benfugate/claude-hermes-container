@@ -5,7 +5,7 @@
 # bumps that pointer, which is what makes upstream tracking event-driven
 # instead of relying on an Actions `schedule:` (those get auto-disabled after
 # 60 days of repository inactivity).
-FROM node:24-trixie-slim@sha256:0820eaa85e07d0490446dd01d14707e17e6108a36988cf374899cd057eb3812d
+FROM node:24-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
